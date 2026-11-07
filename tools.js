@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { fetchImageAsBase64 } from "./safe-fetch.js";
 
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
 const MODEL = process.env.GEMINI_IMAGE_MODEL || "gemini-2.5-flash-image";
@@ -33,15 +34,6 @@ async function callGemini(parts) {
   return { b64: img.inlineData.data, mime: img.inlineData.mimeType || "image/png", text };
 }
 
-async function fetchImageAsBase64(imageUrl) {
-  const res = await fetch(imageUrl);
-  if (!res.ok) throw new Error(`Could not fetch reference image (${res.status})`);
-  const mime = res.headers.get("content-type") || "image/png";
-  const buf = Buffer.from(await res.arrayBuffer());
-  if (buf.length > 15 * 1024 * 1024) throw new Error("Reference image too large (>15MB)");
-  return { data: buf.toString("base64"), mimeType: mime.split(";")[0] };
-}
-
 export function buildServer() {
   const server = new McpServer({ name: "nanobanana", version: "1.0.0" });
 
@@ -71,7 +63,7 @@ export function buildServer() {
         "Generate a new image using an existing image as reference — e.g. 'same room as this image, camera at the window looking at the headboard wall', or targeted edits like 'make the curtains white'. Pass a publicly fetchable image URL as reference_image_url.",
       inputSchema: {
         prompt: z.string().describe("What to change or which new camera angle/scene to produce, referencing the input image."),
-        reference_image_url: z.string().url().describe("Publicly accessible URL of the reference image (https)."),
+        reference_image_url: z.string().url().describe("Publicly accessible https URL of the reference image (max 15 MB, no redirects)."),
       },
     },
     async ({ prompt, reference_image_url }) => {
